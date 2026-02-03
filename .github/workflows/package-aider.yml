@@ -1,0 +1,67 @@
+name: Build Pre-baked Aider Environments
+
+on:
+  workflow_dispatch: # Manuel tetiklemek için
+
+jobs:
+  build:
+    name: Build for ${{ matrix.os }} (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - os: linux
+            arch: x86_64
+            runner: ubuntu-latest
+            asset_name: cpython-3.11.14+20260127-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz
+          - os: windows
+            arch: x86_64
+            runner: windows-latest
+            asset_name: cpython-3.11.14+20260127-x86_64-pc-windows-msvc-install_only_stripped.tar.gz
+          - os: macos
+            arch: aarch64
+            runner: macos-latest # M1 Runner
+            asset_name: cpython-3.11.14+20260127-aarch64-apple-darwin-install_only_stripped.tar.gz
+          - os: macos
+            arch: x86_64
+            runner: macos-13 # Intel Runner
+            asset_name: cpython-3.11.14+20260127-x86_64-apple-darwin-install_only_stripped.tar.gz
+
+    steps:
+      - name: Download Standalone Python
+        run: |
+          curl -L "https://github.com/indygreg/python-build-standalone/releases/download/20260127/${{ matrix.asset_name }}" -o python_dist.tar.gz
+
+      - name: Extract and Install Aider (Unix)
+        if: matrix.os != 'windows'
+        run: |
+          tar -xzf python_dist.tar.gz
+          cd python
+          ./bin/python3 -m ensurepip
+          ./bin/python3 -m pip install --upgrade pip
+          ./bin/python3 -m pip install aider-chat
+          # Temizlik: Boyutu düşürmek için
+          rm -rf lib/python3.11/test
+          find . -type d -name "__pycache__" -exec rm -rf {} +
+          cd ..
+          tar -czf ../aider-${{ matrix.os }}-${{ matrix.arch }}.tar.gz python
+
+      - name: Extract and Install Aider (Windows)
+        if: matrix.os == 'windows'
+        run: |
+          tar -xzf python_dist.tar.gz
+          cd python
+          ./python.exe -m ensurepip
+          ./python.exe -m pip install --upgrade pip
+          ./python.exe -m pip install aider-chat
+          # Temizlik
+          Remove-Item -Recurse -Force lib/test
+          Get-ChildItem -Path . -Include __pycache__ -Recurse | Remove-Item -Recurse -Force
+          cd ..
+          tar -czf ../aider-windows-x86_64.tar.gz python
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: aider-${{ matrix.os }}-${{ matrix.arch }}
+          path: aider-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
