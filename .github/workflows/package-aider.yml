@@ -1,13 +1,14 @@
 name: Build Pre-baked Aider Environments
 
 on:
-  workflow_dispatch: # Manuel tetiklemek için
+  workflow_dispatch:
 
 jobs:
   build:
     name: Build for ${{ matrix.os }} (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     strategy:
+      fail-fast: false # Bir işletim sistemi hata verirse diğerlerini durdurma
       matrix:
         include:
           - os: linux
@@ -20,19 +21,20 @@ jobs:
             asset_name: cpython-3.11.14+20260127-x86_64-pc-windows-msvc-install_only_stripped.tar.gz
           - os: macos
             arch: aarch64
-            runner: macos-latest # M1 Runner
+            runner: macos-latest # Apple Silicon (M1/M2)
             asset_name: cpython-3.11.14+20260127-aarch64-apple-darwin-install_only_stripped.tar.gz
           - os: macos
             arch: x86_64
-            runner: macos-13 # Intel Runner
+            runner: macos-14 # Güncellendi: Intel runner yerine macOS 14 kullanıyoruz
             asset_name: cpython-3.11.14+20260127-x86_64-apple-darwin-install_only_stripped.tar.gz
 
     steps:
       - name: Download Standalone Python
+        shell: bash
         run: |
           curl -L "https://github.com/indygreg/python-build-standalone/releases/download/20260127/${{ matrix.asset_name }}" -o python_dist.tar.gz
 
-      - name: Extract and Install Aider (Unix)
+      - name: Extract and Install (Unix)
         if: matrix.os != 'windows'
         run: |
           tar -xzf python_dist.tar.gz
@@ -40,28 +42,32 @@ jobs:
           ./bin/python3 -m ensurepip
           ./bin/python3 -m pip install --upgrade pip
           ./bin/python3 -m pip install aider-chat
-          # Temizlik: Boyutu düşürmek için
+          # Temizlik
           rm -rf lib/python3.11/test
           find . -type d -name "__pycache__" -exec rm -rf {} +
           cd ..
-          tar -czf ../aider-${{ matrix.os }}-${{ matrix.arch }}.tar.gz python
+          tar -czf aider-${{ matrix.os }}-${{ matrix.arch }}.tar.gz python
 
-      - name: Extract and Install Aider (Windows)
+      - name: Extract and Install (Windows)
         if: matrix.os == 'windows'
+        shell: pwsh
         run: |
-          tar -xzf python_dist.tar.gz
-          cd python
-          ./python.exe -m ensurepip
-          ./python.exe -m pip install --upgrade pip
-          ./python.exe -m pip install aider-chat
+          # Windows'ta tar.gz açmak için yerleşik tar'ı kullanabiliriz
+          mkdir build_dir
+          tar -xzf python_dist.tar.gz -C build_dir
+          # Klasör yapısını kontrol et (bazen 'python' klasörü iç içe çıkabiliyor)
+          $pythonDir = Get-ChildItem -Path build_dir -Directory | Select-Object -First 1
+          cd $pythonDir.FullName
+          .\python.exe -m ensurepip
+          .\python.exe -m pip install --upgrade pip
+          .\python.exe -m pip install aider-chat
           # Temizlik
-          Remove-Item -Recurse -Force lib/test
-          Get-ChildItem -Path . -Include __pycache__ -Recurse | Remove-Item -Recurse -Force
           cd ..
-          tar -czf ../aider-windows-x86_64.tar.gz python
+          tar -czf ../aider-windows-x86_64.tar.gz .
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: aider-${{ matrix.os }}-${{ matrix.arch }}
           path: aider-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
