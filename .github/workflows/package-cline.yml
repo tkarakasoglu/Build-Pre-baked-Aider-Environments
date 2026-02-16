@@ -58,18 +58,17 @@ jobs:
         shell: bash
         run: |
           mkdir -p output
-          # dist içindeki her şeyi (x64 ve arm64 dahil) kopyala
+          # dist içindeki her şeyi kopyala
           cp -r dist/* output/
           
-          # Windows .exe kontrolü
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            if [ -f "output/cline-win" ]; then
+          # Sadece windows runner'ında ve eğer .exe uzantısı eksikse isimlendirmeyi düzelt
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            if [[ -f "output/cline-win" && ! -f "output/cline-win.exe" ]]; then
               mv output/cline-win output/cline-win.exe
             fi
           fi
           
-          # Dosyaların oluşup oluşmadığını loglarda görelim
-          echo "Üretilen dosyalar:"
+          echo "Çıktı klasörü içeriği:"
           ls -R output/
 
       - name: Upload Artifact
