@@ -16,51 +16,30 @@ jobs:
       fail-fast: false
 
     steps:
-      - name: Checkout Cline Source Code
-        uses: actions/checkout@v4
-        with:
-          repository: cline/cline
-          ref: main
-
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Debug & Build
+      - name: Build Standalone Binary from NPM
         shell: bash
         run: |
-          echo "--- Klasör Yapısı ---"
-          ls -R | grep ":$" | sed -e 's/:$//' -e 's/[^-][^\/]*\//--/g' -e 's/^/   /' | head -n 20
+          mkdir build-dir && cd build-dir
           
-          # 1. CLI dizinini bulmaya çalış
-          TARGET_DIR="."
-          if [ -d "packages/cli" ]; then
-            TARGET_DIR="packages/cli"
-          elif [ -d "cli" ]; then
-            TARGET_DIR="cli"
-          fi
+          # 1. Cline CLI'yı en güncel haliyle çek
+          npm init -y
+          npm install @cline/cli
           
-          echo "Hedef dizin: $TARGET_DIR"
-          cd $TARGET_DIR
-
-          # 2. Bağımlılıkları zorla yükle (Legacy peer deps ile)
-          npm install --legacy-peer-deps
-
-          # 3. Giriş dosyasını tespit et (index.js, main.js veya bin içindeki dosya)
-          ENTRY_FILE="index.js"
-          if [ -f "dist/index.js" ]; then ENTRY_FILE="dist/index.js"; fi
-          if [ -f "bin/cline.js" ]; then ENTRY_FILE="bin/cline.js"; fi
-
-          # 4. PKG Çalıştır
+          # 2. Giriş dosyasını tespit et (NPM paketindeki bin dosyası)
+          ENTRY_FILE="node_modules/@cline/cli/bin/index.js"
+          
+          # 3. PKG ile paketle
           TARGET_OS="${{ matrix.os == 'ubuntu-latest' && 'linux' || (matrix.os == 'macos-latest' && 'macos' || 'win') }}"
-          echo "Building $ENTRY_FILE for $TARGET_OS..."
+          echo "Building Cline CLI for $TARGET_OS..."
           
-          # Çıktıyı doğrudan ana dizindeki dist'e at
-          mkdir -p ../../dist
           npx @yao-pkg/pkg $ENTRY_FILE \
             --targets node20-$TARGET_OS-x64 \
-            --output ../../dist/cline-binary \
+            --output ../dist/cline-binary \
             --compress GZip
 
       - name: Prepare Artifacts
@@ -68,9 +47,9 @@ jobs:
         run: |
           mkdir -p output
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            cp dist/*.exe output/cline-win.exe || cp dist/cline-binary output/cline-win.exe || true
+            mv dist/cline-binary.exe output/cline-win.exe || true
           else
-            cp dist/cline-binary output/cline-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'macos' }} || true
+            mv dist/cline-binary output/cline-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'macos' }} || true
           fi
 
       - name: Upload Artifact
@@ -78,3 +57,21 @@ jobs:
         with:
           name: cline-${{ matrix.os }}
           path: output/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-binaries
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: all-binaries/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
