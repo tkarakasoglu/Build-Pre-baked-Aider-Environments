@@ -27,7 +27,7 @@ jobs:
           # 1. Hazırlık
           mkdir build-area && cd build-area
           npm init -y
-          npm install cline || npm install @cline/cli || npm install cline-cli
+          npm install cline
           
           # 2. Giriş dosyasını (bin) bul
           ENTRY_FILE=$(find node_modules -name "index.js" | grep "bin" | head -n 1)
