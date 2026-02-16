@@ -80,7 +80,6 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: always()
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -92,5 +91,10 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: all-binaries/*
+          tag_name: "latest-build"  # Tag yoksa bu ismi kullanır
+          name: "Latest Standalone Build"
+          body: "Manual build from GitHub Actions"
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
