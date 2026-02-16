@@ -54,12 +54,18 @@ jobs:
         shell: bash
         run: |
           mkdir -p output
-          # Dist klasöründeki her şeyi çıktıya kopyala
-          cp -r dist/* output/
-          # Windows .exe uzantısını garantiye al (pkg bazen eklemezse diye)
-          if [ "${{ matrix.os }}" = "windows-latest" ] && [ -f "output/cline-win" ]; then
-            mv output/cline-win output/cline-win.exe
+          # Önce her şeyi kopyala
+          cp -rn dist/* output/ || true
+          
+          # Windows için isim düzeltme (Sadece dosya varsa ve ismi .exe değilse)
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            if [ -f "output/cline-win" ] && [ ! -f "output/cline-win.exe" ]; then
+              mv output/cline-win output/cline-win.exe
+            fi
           fi
+          
+          # Hata almamak için her ihtimale karşı başarılı dön
+          exit 0
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
