@@ -21,22 +21,25 @@ jobs:
         with:
           node-version: 22
 
-      - name: Build Standalone Binary from NPM
+      - name: Install and Package Cline
         shell: bash
         run: |
-          mkdir build-dir && cd build-dir
-          
-          # 1. Cline CLI'yı en güncel haliyle çek
+          # 1. Cline'ı yerel bir klasöre kur
+          mkdir build-area && cd build-area
           npm init -y
-          npm install @cline/cli
           
-          # 2. Giriş dosyasını tespit et (NPM paketindeki bin dosyası)
-          ENTRY_FILE="node_modules/@cline/cli/bin/index.js"
+          # Paketi kurmayı dene, hata alırsan 'cline-cli' veya '@cline/cli' dene
+          npm install cline || npm install @cline/cli || npm install cline-cli
           
-          # 3. PKG ile paketle
+          # 2. Giriş dosyasını (bin) bul
+          # Genelde node_modules/.bin içindeki sembolik linkin işaret ettiği yerdir
+          ENTRY_FILE=$(find node_modules -name "index.js" | grep "bin" | head -n 1)
+          if [ -z "$ENTRY_FILE" ]; then ENTRY_FILE="node_modules/cline/bin/cline.js"; fi
+          
+          echo "Giriş dosyası bulundu: $ENTRY_FILE"
+
+          # 3. PKG ile Paketle
           TARGET_OS="${{ matrix.os == 'ubuntu-latest' && 'linux' || (matrix.os == 'macos-latest' && 'macos' || 'win') }}"
-          echo "Building Cline CLI for $TARGET_OS..."
-          
           npx @yao-pkg/pkg $ENTRY_FILE \
             --targets node20-$TARGET_OS-x64 \
             --output ../dist/cline-binary \
