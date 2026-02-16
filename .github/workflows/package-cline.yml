@@ -24,35 +24,41 @@ jobs:
       - name: Install and Package Cline
         shell: bash
         run: |
-          # 1. Cline'ı yerel bir klasöre kur
+          # 1. Hazırlık
           mkdir build-area && cd build-area
           npm init -y
-          
-          # Paketi kurmayı dene, hata alırsan 'cline-cli' veya '@cline/cli' dene
           npm install cline || npm install @cline/cli || npm install cline-cli
           
           # 2. Giriş dosyasını (bin) bul
-          # Genelde node_modules/.bin içindeki sembolik linkin işaret ettiği yerdir
           ENTRY_FILE=$(find node_modules -name "index.js" | grep "bin" | head -n 1)
           if [ -z "$ENTRY_FILE" ]; then ENTRY_FILE="node_modules/cline/bin/cline.js"; fi
-          
           echo "Giriş dosyası bulundu: $ENTRY_FILE"
 
           # 3. PKG ile Paketle
-          TARGET_OS="${{ matrix.os == 'ubuntu-latest' && 'linux' || (matrix.os == 'macos-latest' && 'macos' || 'win') }}"
-          npx @yao-pkg/pkg $ENTRY_FILE \
-            --targets node20-$TARGET_OS-x64 \
-            --output ../dist/cline-binary \
-            --compress GZip
+          mkdir -p ../dist
+          
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            # macOS için çift mimari üretimi
+            echo "Building for macOS Intel & Apple Silicon..."
+            npx @yao-pkg/pkg $ENTRY_FILE --targets node20-macos-x64 --output ../dist/cline-macos-x64 --compress GZip
+            npx @yao-pkg/pkg $ENTRY_FILE --targets node20-macos-arm64 --output ../dist/cline-macos-arm64 --compress GZip
+          elif [ "${{ matrix.os }}" = "windows-latest" ]; then
+            echo "Building for Windows..."
+            npx @yao-pkg/pkg $ENTRY_FILE --targets node20-win-x64 --output ../dist/cline-win --compress GZip
+          else
+            echo "Building for Linux..."
+            npx @yao-pkg/pkg $ENTRY_FILE --targets node20-linux-x64 --output ../dist/cline-linux --compress GZip
+          fi
 
       - name: Prepare Artifacts
         shell: bash
         run: |
           mkdir -p output
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            mv dist/cline-binary.exe output/cline-win.exe || true
-          else
-            mv dist/cline-binary output/cline-${{ matrix.os == 'ubuntu-latest' && 'linux' || 'macos' }} || true
+          # Dist klasöründeki her şeyi çıktıya kopyala
+          cp -r dist/* output/
+          # Windows .exe uzantısını garantiye al (pkg bazen eklemezse diye)
+          if [ "${{ matrix.os }}" = "windows-latest" ] && [ -f "output/cline-win" ]; then
+            mv output/cline-win output/cline-win.exe
           fi
 
       - name: Upload Artifact
