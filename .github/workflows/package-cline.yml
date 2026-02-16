@@ -1,53 +1,55 @@
-name: Release Cline CLI
+name: Remote Build Cline CLI
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Manuel başlatma butonu için
   push:
     tags:
       - 'v*'
 
 jobs:
   build:
+    name: Build for ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
-      - name: Checkout code
+      - name: Checkout Cline Source Code
         uses: actions/checkout@v4
+        with:
+          repository: cline/cline # Burayı hedeflediğin CLI reposuyla değiştir (örn: cline/cline-cli)
+          ref: main # Veya hangi sürümü istiyorsan (örn: v2.0.0)
 
-      - name: Setup Node.js
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: 22 # Önerilen sürüm
+          node-version: 22
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: npm install
 
-      - name: Build binaries
+      - name: Build Standalone Binary (PKG)
         run: |
-          # pkg bazen Node 22 binary'sini bulamazsa npx üzerinden çekmeyi zorla
-          npx @yao-pkg/pkg . --targets node20-linux-x64,node20-macos-x64,node20-macos-arm64,node20-win-x64 --out-path dist
+          # PKG'yi o an yükleyip çalıştırıyoruz, yerel package.json bağımlılığına gerek yok
+          npx @yao-pkg/pkg . --targets node20-${{ matrix.os == 'ubuntu-latest' && 'linux' || (matrix.os == 'macos-latest' && 'macos' || 'win') }}-x64 --out-path dist
 
-      - name: Rename binaries (for consistency)
+      - name: Prepare Artifacts
         shell: bash
         run: |
           mkdir -p output
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            mv dist/cline-cli-win.exe output/cline-win.exe
+            mv dist/*.exe output/cline-win.exe
           elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-            # macOS hem x64 hem arm64 üretir
-            mv dist/cline-cli-macos-x64 output/cline-macos-x64
-            mv dist/cline-cli-macos-arm64 output/cline-macos-arm64
+            mv dist/* output/cline-macos
           else
-            mv dist/cline-cli-linux output/cline-linux
+            mv dist/* output/cline-linux
           fi
 
-      - name: Upload Artifacts
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: binaries-${{ matrix.os }}
+          name: cline-${{ matrix.os }}
           path: output/*
 
   release:
@@ -60,7 +62,7 @@ jobs:
           path: all-binaries
           merge-multiple: true
 
-      - name: Create Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: all-binaries/*
