@@ -1,7 +1,7 @@
 name: Remote Build Cline CLI
 
 on:
-  workflow_dispatch: # Manuel başlatma butonu için
+  workflow_dispatch:
   push:
     tags:
       - 'v*'
@@ -13,37 +13,55 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+      fail-fast: false # Bir işletim sistemi hata verirse diğerleri durmasın
 
     steps:
       - name: Checkout Cline Source Code
         uses: actions/checkout@v4
         with:
-          repository: cline/cline # Burayı hedeflediğin CLI reposuyla değiştir (örn: cline/cline-cli)
-          ref: main # Veya hangi sürümü istiyorsan (örn: v2.0.0)
+          repository: cline/cline
+          ref: main
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Build Standalone Binary (PKG)
+      - name: Build Logic
+        shell: bash
         run: |
-          # PKG'yi o an yükleyip çalıştırıyoruz, yerel package.json bağımlılığına gerek yok
-          npx @yao-pkg/pkg . --targets node20-${{ matrix.os == 'ubuntu-latest' && 'linux' || (matrix.os == 'macos-latest' && 'macos' || 'win') }}-x64 --out-path dist
+          # 1. Klasör yapısını kontrol et ve doğru dizine git
+          # Eğer cline/cline monorepo ise CLI genelde alt klasördedir
+          if [ -d "packages/cli" ]; then
+            cd packages/cli
+          fi
+
+          # 2. Bağımlılıkları yükle
+          npm install --omit=dev || npm install
+
+          # 3. PKG ile standalone binary oluştur
+          # targets: node20 kullanmak daha stabil sonuç verir
+          TARGET_OS="${{ matrix.os == 'ubuntu-latest' && 'linux' || (matrix.os == 'macos-latest' && 'macos' || 'win') }}"
+          
+          echo "Building for $TARGET_OS..."
+          
+          # npx pkg kullanarak doğrudan paketle
+          npx @yao-pkg/pkg . \
+            --targets node20-$TARGET_OS-x64 \
+            --out-path ../../dist \
+            --compress GZip
 
       - name: Prepare Artifacts
         shell: bash
         run: |
           mkdir -p output
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            mv dist/*.exe output/cline-win.exe
+            mv dist/*.exe output/cline-win.exe || true
           elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-            mv dist/* output/cline-macos
+            # macOS binary ismini temizle
+            find dist/ -type f -not -name "*.exe" -exec mv {} output/cline-macos \;
           else
-            mv dist/* output/cline-linux
+            find dist/ -type f -not -name "*.exe" -exec mv {} output/cline-linux \;
           fi
 
       - name: Upload Artifact
@@ -55,6 +73,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
