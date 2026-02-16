@@ -54,18 +54,19 @@ jobs:
         shell: bash
         run: |
           mkdir -p output
-          # Önce her şeyi kopyala
-          cp -rn dist/* output/ || true
+          # dist içindeki her şeyi (x64 ve arm64 dahil) kopyala
+          cp -r dist/* output/
           
-          # Windows için isim düzeltme (Sadece dosya varsa ve ismi .exe değilse)
+          # Windows .exe kontrolü
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            if [ -f "output/cline-win" ] && [ ! -f "output/cline-win.exe" ]; then
+            if [ -f "output/cline-win" ]; then
               mv output/cline-win output/cline-win.exe
             fi
           fi
           
-          # Hata almamak için her ihtimale karşı başarılı dön
-          exit 0
+          # Dosyaların oluşup oluşmadığını loglarda görelim
+          echo "Üretilen dosyalar:"
+          ls -R output/
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
