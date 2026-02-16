@@ -23,11 +23,19 @@ jobs:
 
       - name: Install and Package Cline
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # API limitini aşmak için şart
         run: |
           # 1. Hazırlık
           mkdir build-area && cd build-area
           npm init -y
-          npm install cline
+          
+          # GitHub Token'ını npm ortamına tanıtıyoruz (bazı paketler için gerekebilir)
+          npm config set //npm.pkg.github.com/:_authToken ${{ secrets.GITHUB_TOKEN }}
+          
+          # Paketi kur. Hata verirse ignore-scripts kullanarak 
+          # postinstall'daki ripgrep indirmesini sonraya bırakabiliriz
+          npm install cline --prefer-offline --no-audit || npm install cline --ignore-scripts
           
           # 2. Giriş dosyasını (bin) bul
           ENTRY_FILE=$(find node_modules -name "index.js" | grep "bin" | head -n 1)
@@ -38,15 +46,11 @@ jobs:
           mkdir -p ../dist
           
           if [ "${{ matrix.os }}" = "macos-latest" ]; then
-            # macOS için çift mimari üretimi
-            echo "Building for macOS Intel & Apple Silicon..."
             npx @yao-pkg/pkg $ENTRY_FILE --targets node20-macos-x64 --output ../dist/cline-macos-x64 --compress GZip
             npx @yao-pkg/pkg $ENTRY_FILE --targets node20-macos-arm64 --output ../dist/cline-macos-arm64 --compress GZip
           elif [ "${{ matrix.os }}" = "windows-latest" ]; then
-            echo "Building for Windows..."
             npx @yao-pkg/pkg $ENTRY_FILE --targets node20-win-x64 --output ../dist/cline-win --compress GZip
           else
-            echo "Building for Linux..."
             npx @yao-pkg/pkg $ENTRY_FILE --targets node20-linux-x64 --output ../dist/cline-linux --compress GZip
           fi
 
